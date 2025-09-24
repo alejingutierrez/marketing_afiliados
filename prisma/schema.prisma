@@ -1,0 +1,610 @@
+// Prisma schema for Medipiel marketing de afiliados platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id                  String                  @id @default(uuid())
+  name                String
+  slug                String                  @unique
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  brands              Brand[]
+  users               User[]
+  influencers         Influencer[]
+  userRoles           UserRole[]
+  policyVersions      PolicyVersion[]
+  campaigns           Campaign[]
+  campaignInfluencers CampaignInfluencer[]
+  discountCodes       DiscountCode[]
+  orders              Order[]
+  commissions         CommissionTransaction[]
+  withdrawalRequests  WithdrawalRequest[]
+  payments            Payment[]
+  reconciliationLogs  ReconciliationLog[]
+  auditLogs           AuditLog[]
+  notifications       NotificationQueue[]
+  webhookLogs         WebhookDeliveryLog[]
+  scheduledJobs       ScheduledJob[]
+}
+
+model User {
+  id           String     @id @default(uuid())
+  tenantId     String
+  email        String     @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  status       UserStatus @default(ACTIVE)
+  lastLoginAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  roles        UserRole[]
+  ownedBrands  Brand[]    @relation("BrandOwner")
+  auditLogs    AuditLog[] @relation("AuditActor")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+}
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+}
+
+model Role {
+  id        String     @id @default(uuid())
+  name      String     @unique
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  userRoles UserRole[]
+}
+
+model UserRole {
+  id         String   @id @default(uuid())
+  userId     String
+  roleId     String
+  tenantId   String
+  assignedAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  role   Role   @relation(fields: [roleId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([userId, roleId, tenantId])
+  @@index([tenantId])
+}
+
+model Influencer {
+  id              String           @id @default(uuid())
+  tenantId        String
+  firstName       String
+  lastName        String
+  documentType    String
+  documentNumber  String
+  email           String
+  phone           String?
+  address         String?
+  city            String?
+  country         String?
+  socialLinks     Json?
+  bankAccount     Json?
+  taxProfile      String?
+  status          InfluencerStatus @default(PENDING)
+  rejectionReason String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  deletedAt       DateTime?
+
+  tenant              Tenant                  @relation(fields: [tenantId], references: [id])
+  consents            LegalConsent[]
+  campaignMemberships CampaignInfluencer[]
+  codes               DiscountCode[]
+  balance             InfluencerBalance?
+  withdrawals         WithdrawalRequest[]
+  commissions         CommissionTransaction[]
+  orderAttributions   OrderAttribution[]
+  payments            Payment[]
+
+  @@unique([tenantId, documentType, documentNumber])
+  @@index([tenantId])
+  @@index([email])
+}
+
+enum InfluencerStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+model PolicyVersion {
+  id          String         @id @default(uuid())
+  tenantId    String
+  policyType  PolicyType
+  version     String
+  publishedAt DateTime
+  documentUrl String
+  checksum    String
+  isActive    Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  consents    LegalConsent[]
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, policyType, version])
+}
+
+enum PolicyType {
+  TERMS
+  PRIVACY
+  HABEAS_DATA
+}
+
+model LegalConsent {
+  id              String   @id @default(uuid())
+  influencerId    String
+  policyVersionId String
+  acceptedAt      DateTime @default(now())
+  ipAddress       String?
+  userAgent       String?
+  consentHash     String
+  acceptedBy      String?
+
+  influencer    Influencer    @relation(fields: [influencerId], references: [id])
+  policyVersion PolicyVersion @relation(fields: [policyVersionId], references: [id])
+
+  @@index([policyVersionId])
+  @@index([influencerId])
+}
+
+model Brand {
+  id          String      @id @default(uuid())
+  tenantId    String
+  name        String
+  slug        String
+  description String?
+  status      BrandStatus @default(ACTIVE)
+  ownerUserId String?
+  logoUrl     String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  owner     User?      @relation("BrandOwner", fields: [ownerUserId], references: [id])
+  campaigns Campaign[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+}
+
+enum BrandStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model Campaign {
+  id                     String            @id @default(uuid())
+  tenantId               String
+  brandId                String
+  name                   String
+  slug                   String
+  description            String?
+  startDate              DateTime
+  endDate                DateTime?
+  status                 CampaignStatus    @default(DRAFT)
+  commissionBase         Decimal           @db.Decimal(5, 2)
+  commissionBasis        CommissionBasis   @default(PRE_TAX)
+  maxDiscountPercent     Decimal?          @db.Decimal(5, 2)
+  maxUsage               Int?
+  minOrderValue          Decimal?          @db.Decimal(10, 2)
+  confirmationWindowDays Int               @default(15)
+  stackingRules          Json?
+  eligibleScopeType      EligibleScopeType @default(SKU)
+  eligibleScopeValues    Json?
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+
+  tenant      Tenant                  @relation(fields: [tenantId], references: [id])
+  brand       Brand                   @relation(fields: [brandId], references: [id])
+  tiers       CampaignTier[]
+  memberships CampaignInfluencer[]
+  codes       DiscountCode[]
+  orders      OrderAttribution[]
+  commissions CommissionTransaction[]
+
+  @@unique([brandId, slug])
+  @@index([tenantId])
+  @@index([brandId])
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ENDED
+}
+
+enum CommissionBasis {
+  PRE_TAX
+  POST_TAX
+}
+
+enum EligibleScopeType {
+  SKU
+  CATEGORY
+}
+
+model CampaignTier {
+  id                      String  @id @default(uuid())
+  campaignId              String
+  name                    String
+  level                   Int
+  thresholdConfirmedSales Decimal @db.Decimal(12, 2)
+  commissionPercent       Decimal @db.Decimal(5, 2)
+  evaluationPeriodDays    Int
+  isDefault               Boolean @default(false)
+
+  campaign Campaign @relation(fields: [campaignId], references: [id])
+
+  @@unique([campaignId, level])
+}
+
+model CampaignInfluencer {
+  id           String                   @id @default(uuid())
+  tenantId     String
+  campaignId   String
+  influencerId String
+  assignedAt   DateTime                 @default(now())
+  assignedBy   String?
+  status       CampaignInfluencerStatus @default(ACTIVE)
+  notes        String?
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id])
+  campaign   Campaign   @relation(fields: [campaignId], references: [id])
+  influencer Influencer @relation(fields: [influencerId], references: [id])
+
+  @@unique([campaignId, influencerId])
+  @@index([tenantId])
+}
+
+enum CampaignInfluencerStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model DiscountCode {
+  id              String             @id @default(uuid())
+  tenantId        String
+  campaignId      String
+  influencerId    String
+  code            String
+  prefix          String?
+  suffix          String?
+  status          DiscountCodeStatus @default(PENDING)
+  discountPercent Decimal?           @db.Decimal(5, 2)
+  startDate       DateTime?
+  endDate         DateTime?
+  maxUsage        Int?
+  usageCount      Int                @default(0)
+  conditions      Json?
+  vtexCouponId    String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  tenant       Tenant             @relation(fields: [tenantId], references: [id])
+  campaign     Campaign           @relation(fields: [campaignId], references: [id])
+  influencer   Influencer         @relation(fields: [influencerId], references: [id])
+  attributions OrderAttribution[]
+
+  @@unique([tenantId, code])
+  @@index([campaignId])
+  @@index([influencerId])
+}
+
+enum DiscountCodeStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+}
+
+model Order {
+  id            String      @id
+  tenantId      String
+  status        OrderStatus
+  placedAt      DateTime
+  paidAt        DateTime?
+  currency      String
+  totalAmount   Decimal     @db.Decimal(12, 2)
+  customerEmail String?
+  rawPayload    Json?
+  originChannel String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  tenant      Tenant                 @relation(fields: [tenantId], references: [id])
+  lines       OrderLine[]
+  attribution OrderAttribution?
+  commission  CommissionTransaction? @relation("OrderCommission")
+  webhookLogs WebhookDeliveryLog[]
+
+  @@index([tenantId])
+  @@index([status])
+}
+
+enum OrderStatus {
+  CREATED
+  PAID
+  INVOICED
+  SHIPPED
+  CANCELED
+  RETURNED
+}
+
+model OrderLine {
+  id                    String   @id @default(uuid())
+  orderId               String
+  skuId                 String
+  skuRef                String?
+  title                 String
+  quantity              Int
+  unitPrice             Decimal  @db.Decimal(10, 2)
+  totalPrice            Decimal  @db.Decimal(12, 2)
+  taxAmount             Decimal? @db.Decimal(10, 2)
+  category              String?
+  eligibleForCommission Boolean  @default(false)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+model OrderAttribution {
+  id               String   @id @default(uuid())
+  orderId          String   @unique
+  discountCodeId   String
+  influencerId     String
+  campaignId       String
+  attributedAmount Decimal  @db.Decimal(12, 2)
+  eligibleAmount   Decimal  @db.Decimal(12, 2)
+  stackingDetails  Json?
+  createdAt        DateTime @default(now())
+
+  order        Order                   @relation(fields: [orderId], references: [id])
+  discountCode DiscountCode            @relation(fields: [discountCodeId], references: [id])
+  influencer   Influencer              @relation(fields: [influencerId], references: [id])
+  campaign     Campaign                @relation(fields: [campaignId], references: [id])
+  commissions  CommissionTransaction[]
+
+  @@index([discountCodeId])
+  @@index([influencerId])
+  @@index([campaignId])
+}
+
+model CommissionTransaction {
+  id                 String          @id @default(uuid())
+  tenantId           String
+  orderId            String          @unique
+  orderAttributionId String
+  influencerId       String
+  campaignId         String
+  tierLevel          Int?
+  state              CommissionState @default(ESTIMATED)
+  grossAmount        Decimal         @db.Decimal(12, 2)
+  netAmount          Decimal         @db.Decimal(12, 2)
+  calculatedAt       DateTime        @default(now())
+  confirmedAt        DateTime?
+  revertedAt         DateTime?
+  reason             String?
+  metadata           Json?
+
+  tenant           Tenant           @relation(fields: [tenantId], references: [id])
+  order            Order            @relation("OrderCommission", fields: [orderId], references: [id])
+  orderAttribution OrderAttribution @relation(fields: [orderAttributionId], references: [id])
+  influencer       Influencer       @relation(fields: [influencerId], references: [id])
+  campaign         Campaign         @relation(fields: [campaignId], references: [id])
+
+  @@index([tenantId])
+  @@index([orderId])
+  @@index([influencerId])
+  @@index([campaignId])
+}
+
+enum CommissionState {
+  ESTIMATED
+  CONFIRMED
+  REVERTED
+}
+
+model InfluencerBalance {
+  influencerId           String   @id
+  estimatedAmount        Decimal  @default(0) @db.Decimal(12, 2)
+  confirmedAmount        Decimal  @default(0) @db.Decimal(12, 2)
+  revertedAmount         Decimal  @default(0) @db.Decimal(12, 2)
+  availableForWithdrawal Decimal  @default(0) @db.Decimal(12, 2)
+  lastCalculatedAt       DateTime @default(now())
+
+  influencer Influencer @relation(fields: [influencerId], references: [id])
+}
+
+model WithdrawalRequest {
+  id               String           @id @default(uuid())
+  tenantId         String
+  influencerId     String
+  requestedAmount  Decimal          @db.Decimal(12, 2)
+  status           WithdrawalStatus @default(PENDING)
+  requestedAt      DateTime         @default(now())
+  processedAt      DateTime?
+  processedBy      String?
+  paymentReference String?
+  attachments      Json?
+  notes            String?
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id])
+  influencer Influencer @relation(fields: [influencerId], references: [id])
+  payment    Payment?
+
+  @@index([tenantId])
+  @@index([influencerId])
+}
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+model Payment {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  withdrawalRequestId String?  @unique
+  influencerId        String
+  amount              Decimal  @db.Decimal(12, 2)
+  paymentDate         DateTime
+  method              String
+  reference           String?
+  voucherUrl          String?
+  taxWithheld         Decimal? @db.Decimal(12, 2)
+  processedBy         String?
+  createdAt           DateTime @default(now())
+
+  tenant            Tenant             @relation(fields: [tenantId], references: [id])
+  withdrawalRequest WithdrawalRequest? @relation(fields: [withdrawalRequestId], references: [id])
+  influencer        Influencer         @relation(fields: [influencerId], references: [id])
+
+  @@index([tenantId])
+  @@index([influencerId])
+}
+
+model ReconciliationLog {
+  id                 String               @id @default(uuid())
+  tenantId           String
+  runDate            DateTime
+  type               ReconciliationType
+  status             ReconciliationStatus
+  discrepanciesFound Int                  @default(0)
+  reportUrl          String?
+  summary            Json?
+  triggeredBy        String?
+  createdAt          DateTime             @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, runDate])
+}
+
+enum ReconciliationType {
+  DAILY
+  FORTNIGHTLY
+  ADHOC
+}
+
+enum ReconciliationStatus {
+  SUCCESS
+  WARN
+  FAILED
+}
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  tenantId      String
+  entity        String
+  entityId      String
+  action        String
+  performedBy   String?
+  role          String?
+  payloadBefore Json?
+  payloadAfter  Json?
+  ipAddress     String?
+  performedAt   DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  actor  User?  @relation("AuditActor", fields: [performedBy], references: [id])
+
+  @@index([tenantId, entity])
+}
+
+model NotificationQueue {
+  id            String             @id @default(uuid())
+  tenantId      String
+  type          String
+  recipient     String
+  template      String
+  payload       Json
+  status        NotificationStatus @default(PENDING)
+  attempts      Int                @default(0)
+  lastAttemptAt DateTime?
+  errorMessage  String?
+  createdAt     DateTime           @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, status])
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+model WebhookDeliveryLog {
+  id            String        @id @default(uuid())
+  tenantId      String
+  orderId       String?
+  eventType     String
+  status        WebhookStatus
+  payload       Json?
+  attempts      Int           @default(0)
+  lastAttemptAt DateTime?
+  responseCode  Int?
+  responseBody  String?
+  createdAt     DateTime      @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  order  Order? @relation(fields: [orderId], references: [id])
+
+  @@index([tenantId, eventType])
+}
+
+enum WebhookStatus {
+  RECEIVED
+  PROCESSING
+  SUCCESS
+  FAILED
+}
+
+model ScheduledJob {
+  id             String             @id @default(uuid())
+  tenantId       String
+  name           String
+  schedule       String
+  status         ScheduledJobStatus @default(IDLE)
+  lastRunAt      DateTime?
+  lastDurationMs Int?
+  lastError      String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, name])
+}
+
+enum ScheduledJobStatus {
+  IDLE
+  RUNNING
+  FAILED
+  DISABLED
+}

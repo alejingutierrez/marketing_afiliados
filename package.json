@@ -1,0 +1,45 @@
+{
+  "name": "marketing-afiliados",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Plataforma de marketing de afiliados para Medipiel",
+  "type": "module",
+  "scripts": {
+    "lint": "eslint --ext .ts,.tsx,.js,.cjs,.mjs apps packages scripts",
+    "format": "prettier --write \"**/*.{ts,tsx,js,cjs,mjs,json,md,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,cjs,mjs,json,md,yml,yaml}\"",
+    "prepare": "husky install",
+    "test": "pnpm lint && pnpm --filter @marketing-afiliados/api test && pnpm --filter @marketing-afiliados/web test && pnpm --filter @marketing-afiliados/worker test && node scripts/validate-docs.mjs",
+    "test:e2e": "pnpm --filter @marketing-afiliados/e2e test",
+    "seed:qa": "pnpm exec tsx prisma/seed-qa.ts"
+  },
+  "engines": {
+    "node": ">=20.10.0"
+  },
+  "packageManager": "pnpm@8.15.8",
+  "devDependencies": {
+    "@types/node": "20.12.7",
+    "@typescript-eslint/eslint-plugin": "7.9.0",
+    "@typescript-eslint/parser": "7.9.0",
+    "eslint": "8.57.0",
+    "eslint-config-prettier": "9.1.0",
+    "eslint-import-resolver-typescript": "3.6.1",
+    "eslint-plugin-import": "2.29.1",
+    "eslint-plugin-unused-imports": "3.2.0",
+    "husky": "9.0.11",
+    "lint-staged": "15.2.2",
+    "prettier": "3.2.5",
+    "prisma": "5.16.1",
+    "typescript": "5.4.5",
+    "@types/express": "4.17.21",
+    "tsx": "4.20.5"
+  },
+  "dependencies": {
+    "@prisma/client": "5.16.1",
+    "express": "4.19.2"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,cjs,mjs}": "eslint --fix",
+    "*.{json,md,yml,yaml}": "prettier --write"
+  }
+}

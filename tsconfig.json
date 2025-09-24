@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["apps/web/src/*"],
+      "@domain/*": ["packages/domain/src/*"],
+      "@ui/*": ["packages/ui/src/*"],
+      "@vtex-client": ["packages/vtex-client/src/index.ts"],
+      "@vtex-client/*": ["packages/vtex-client/src/*"]
+    }
+  },
+  "include": [
+    "apps/**/*.ts",
+    "apps/**/*.tsx",
+    "packages/**/*.ts",
+    "packages/**/*.tsx",
+    "packages/**/*.mts",
+    "scripts/**/*.ts",
+    "scripts/**/*.mts",
+    "prisma/**/*.ts"
+  ]
+}

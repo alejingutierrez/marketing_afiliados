@@ -1,0 +1,6 @@
+node_modules
+coverage
+dist
+build
+prisma/migrations
+infrastructure/compose/docker-compose.yml

@@ -1,0 +1,351 @@
+openapi: 3.1.0
+info:
+  title: Marketing Afiliados API
+  version: "1.0.0"
+  description: |
+    API del programa de marketing de afiliados para Medipiel. Los endpoints expuestos cubren autenticación,
+    gestión de influencers y campañas, cálculo de comisiones, pagos, dashboards y sincronización con VTEX.
+servers:
+  - url: https://api.medipiel.local/api/v1
+    description: Referencia local/QA
+  - url: https://staging.medipiel.co/api/v1
+    description: Staging
+security:
+  - bearerAuth: []
+paths:
+  /auth/login:
+    post:
+      summary: Inicia sesión con email, contraseña y código 2FA.
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        "200":
+          description: Tokens emitidos correctamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokens'
+        "401":
+          description: Credenciales inválidas o 2FA incorrecto.
+  /auth/profile:
+    get:
+      summary: Devuelve el perfil básico del usuario autenticado.
+      tags: [auth]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Perfil del usuario autenticado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        "401":
+          description: Token inválido o vencido.
+  /public/influencers:
+    post:
+      summary: Registro público de un influencer (flujo KYC inicial).
+      tags: [influencers]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterInfluencerRequest'
+      responses:
+        "201":
+          description: Influencer registrado con estado `pending`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InfluencerPublicResponse'
+        "400":
+          description: Datos inválidos o política vigente no disponible.
+  /influencers/{id}/status:
+    patch:
+      summary: Actualiza el estado de un influencer.
+      tags: [influencers]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateInfluencerStatusRequest'
+      responses:
+        "200":
+          description: Estado actualizado.
+        "404":
+          description: Influencer no encontrado.
+  /commissions/balances:
+    get:
+      summary: Consulta los saldos de comisiones.
+      tags: [commissions]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: influencerId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Lista de saldos filtrados.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InfluencerBalance'
+  /payments/withdrawals:
+    post:
+      summary: Crea una solicitud de retiro para el influencer autenticado.
+      tags: [payments]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWithdrawalRequest'
+      responses:
+        "201":
+          description: Solicitud registrada para aprobación.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithdrawalResponse'
+  /dashboard/admin:
+    get:
+      summary: Retorna KPIs ejecutivos y métricas globales.
+      tags: [dashboard]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Métricas agregadas para administradores y auditores.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminDashboard'
+  /vtex/reconciliations:
+    post:
+      summary: Registra el resultado de una conciliación VTEX.
+      tags: [vtex]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReconciliationPayload'
+      responses:
+        "201":
+          description: Conciliación almacenada exitosamente.
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          example: admin@medipiel.co
+        password:
+          type: string
+          example: Changeit!2024
+        twoFactorCode:
+          type: string
+          minLength: 6
+          maxLength: 6
+          example: "123456"
+      required: [email, password, twoFactorCode]
+    AuthTokens:
+      type: object
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        expiresIn:
+          type: integer
+      required: [accessToken, refreshToken, expiresIn]
+    UserProfile:
+      type: object
+      properties:
+        sub:
+          type: string
+        email:
+          type: string
+          format: email
+        roles:
+          type: array
+          items:
+            type: string
+        tenantId:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+    RegisterInfluencerRequest:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        documentType:
+          type: string
+          enum: [CC, CE, NIT, PP]
+        documentNumber:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        policyVersionId:
+          type: string
+        consentHash:
+          type: string
+        userAgent:
+          type: string
+      required:
+        - firstName
+        - lastName
+        - documentType
+        - documentNumber
+        - email
+        - policyVersionId
+        - consentHash
+    InfluencerPublicResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+    UpdateInfluencerStatusRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [APPROVED, REJECTED, SUSPENDED]
+        rejectionReason:
+          type: string
+      required: [status]
+    InfluencerBalance:
+      type: object
+      properties:
+        influencerId:
+          type: string
+        confirmedAmount:
+          type: number
+        estimatedAmount:
+          type: number
+        revertedAmount:
+          type: number
+        availableForWithdrawal:
+          type: number
+    CreateWithdrawalRequest:
+      type: object
+      properties:
+        influencerId:
+          type: string
+        brandId:
+          type: string
+        requestedAmount:
+          type: number
+        notes:
+          type: string
+      required:
+        - brandId
+        - requestedAmount
+    WithdrawalResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED, PAID]
+        requestedAmount:
+          type: number
+        currency:
+          type: string
+    AdminDashboard:
+      type: object
+      properties:
+        stats:
+          type: object
+          properties:
+            influencers:
+              type: integer
+            brands:
+              type: integer
+            campaigns:
+              type: integer
+            confirmedCommission:
+              type: number
+        topInfluencers:
+          type: array
+          items:
+            type: object
+            properties:
+              influencerId:
+                type: string
+              name:
+                type: string
+              confirmedCommission:
+                type: number
+        performanceByBrand:
+          type: array
+          items:
+            type: object
+            properties:
+              brandId:
+                type: string
+              brandName:
+                type: string
+              totalSales:
+                type: number
+              confirmedCommission:
+                type: number
+    ReconciliationPayload:
+      type: object
+      properties:
+        runDate:
+          type: string
+          format: date-time
+        type:
+          type: string
+          enum: [daily, fortnightly, adhoc]
+        discrepanciesFound:
+          type: integer
+        alerts:
+          type: array
+          items:
+            type: string
+      required: [runDate, type, discrepanciesFound]
